@@ -44,10 +44,16 @@ class Message extends Equatable {
         chatId: m['chat_id'] as String,
         senderId: m['sender_id'] as String,
         content: m['content'] as String,
-        contentType: ContentType.values.firstWhere((e) => e.name == m['content_type']),
+        contentType: ContentType.values.firstWhere(
+          (e) => e.name == m['content_type'],
+          orElse: () => ContentType.text,
+        ),
         filePath: m['file_path'] as String?,
         timestamp: m['timestamp'] as int,
-        status: MessageStatus.values.firstWhere((e) => e.name == m['status']),
+        status: MessageStatus.values.firstWhere(
+          (e) => e.name == m['status'],
+          orElse: () => MessageStatus.pending,
+        ),
         isOutgoing: (m['is_outgoing'] as int) == 1,
       );
 

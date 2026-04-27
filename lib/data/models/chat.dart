@@ -30,7 +30,10 @@ class Chat extends Equatable {
 
   factory Chat.fromMap(Map<String, dynamic> m) => Chat(
         id: m['id'] as String,
-        type: ChatType.values.firstWhere((e) => e.name == m['type']),
+        type: ChatType.values.firstWhere(
+          (e) => e.name == m['type'],
+          orElse: () => ChatType.direct,
+        ),
         name: m['name'] as String,
         lastMessage: m['last_message'] as String,
         lastMessageTime: m['last_message_time'] as int,
