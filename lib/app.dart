@@ -17,6 +17,7 @@ class App extends StatelessWidget {
       home: FutureBuilder<bool>(
         future: IdentityService.instance.isOnboarded(),
         builder: (context, snap) {
+          if (snap.hasError) return Scaffold(body: Center(child: Text('Ошибка инициализации: ${snap.error}')));
           if (!snap.hasData) return const Scaffold(body: Center(child: CircularProgressIndicator()));
           return snap.data! ? const ChatListScreen() : const OnboardingScreen();
         },
