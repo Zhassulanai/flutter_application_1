@@ -32,11 +32,14 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _bloc = ChatBloc(chatId: widget.chat.id);
     _loadMessages();
-    _chatRepo.clearUnread(widget.chat.id);
+    _chatRepo.clearUnread(widget.chat.id).catchError((e) {
+      debugPrint('clearUnread failed: $e');
+    });
   }
 
   Future<void> _loadMessages() async {
     final msgs = await _msgRepo.loadForChat(widget.chat.id, limit: 50, offset: 0);
+    if (!mounted) return;
     _bloc.add(MessagesLoaded(msgs));
     _scrollToBottom();
   }
@@ -68,7 +71,9 @@ class _ChatScreenState extends State<ChatScreen> {
       isOutgoing: true,
     );
     await _msgRepo.insert(msg);
+    if (!mounted) return;
     await _chatRepo.updateLastMessage(widget.chat.id, text, msg.timestamp);
+    if (!mounted) return;
     _bloc.add(MessageAdded(msg));
     _scrollToBottom();
   }
@@ -80,14 +85,19 @@ class _ChatScreenState extends State<ChatScreen> {
       chatId: widget.chat.id,
       senderId: IdentityService.instance.ownId,
       content: fileName,
-      contentType: ContentType.values.firstWhere((e) => e.name == type),
+      contentType: ContentType.values.firstWhere(
+        (e) => e.name == type,
+        orElse: () => ContentType.file,
+      ),
       filePath: path,
       timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       status: MessageStatus.pending,
       isOutgoing: true,
     );
     await _msgRepo.insert(msg);
+    if (!mounted) return;
     await _chatRepo.updateLastMessage(widget.chat.id, fileName, msg.timestamp);
+    if (!mounted) return;
     _bloc.add(MessageAdded(msg));
     _scrollToBottom();
   }
@@ -182,9 +192,9 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
     );
-    if (confirmed == true) {
-      await _msgRepo.deleteMessage(msg.id);
-      _bloc.add(MessageDeleted(msg.id));
-    }
+    if (!mounted || confirmed != true) return;
+    await _msgRepo.deleteMessage(msg.id);
+    if (!mounted) return;
+    _bloc.add(MessageDeleted(msg.id));
   }
 }

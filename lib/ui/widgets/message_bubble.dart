@@ -57,10 +57,15 @@ class MessageBubble extends StatelessWidget {
       case ContentType.text:
         return Text(message.content);
       case ContentType.image:
-        if (message.filePath != null && File(message.filePath!).existsSync()) {
+        if (message.filePath != null) {
           return ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: Image.file(File(message.filePath!), width: 200, fit: BoxFit.cover),
+            child: Image.file(
+              File(message.filePath!),
+              width: 200,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const Text('[Фото]'),
+            ),
           );
         }
         return const Text('[Фото]');
