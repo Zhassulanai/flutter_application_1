@@ -5,6 +5,7 @@ import 'package:flutter_application_1/services/identity_service.dart';
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    IdentityService.instance.resetForTest();
   });
 
   test('isOnboarded returns false when no name set', () async {

@@ -39,4 +39,10 @@ class IdentityService {
 
   Future<void> updateName(String name) => saveIdentity(name: name, avatarPath: _avatarPath);
   Future<void> updateAvatar(String path) => saveIdentity(name: _name, avatarPath: path);
+
+  void resetForTest() {
+    _ownId = '';
+    _name = '';
+    _avatarPath = null;
+  }
 }
