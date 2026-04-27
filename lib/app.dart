@@ -3,9 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'blocs/contacts/contacts_bloc.dart';
 import 'blocs/network/network_bloc.dart';
 import 'data/database.dart';
+import 'data/models/message.dart';
+import 'data/models/wire_message.dart';
 import 'data/repositories/contact_repository.dart';
+import 'data/repositories/message_repository.dart';
 import 'network/connection_pool.dart';
 import 'network/mdns_service.dart';
+import 'network/message_handler.dart';
 import 'network/websocket_server.dart';
 import 'services/identity_service.dart';
 import 'ui/screens/onboarding_screen.dart';
@@ -24,6 +28,7 @@ class _AppState extends State<App> {
   final _server = WebSocketServer();
   final _pool = ConnectionPool();
   final _mdns = MdnsService();
+  final _incomingHandler = IncomingMessageHandler();
 
   @override
   void initState() {
@@ -33,7 +38,10 @@ class _AppState extends State<App> {
 
   Future<void> _startNetwork() async {
     await _server.start();
-    _server.onMessage = _onRawMessage;
+    _incomingHandler.onMessageReady = (_) {
+      // ChatBloc for the active chat receives updates when the screen reloads on resume.
+    };
+    _server.onMessage = (raw, _) => _incomingHandler.handle(raw);
     _pool.onDisconnected = (peerId) {
       _networkBloc.add(PeerDisconnected(peerId));
       _contactsBloc.add(ContactOnlineChanged(peerId, false));
@@ -45,6 +53,7 @@ class _AppState extends State<App> {
       await ContactRepository(AppDatabase.instance).updateAddress(peer.id, peer.ip, peer.port);
       await ContactRepository(AppDatabase.instance).setOnline(peer.id, true);
       await _pool.connect(peer.id, peer.ip, peer.port);
+      await _flushPending(peer.id);
       _networkBloc.add(PeerConnected(peer.id));
       _contactsBloc.add(ContactOnlineChanged(peer.id, true));
       _loadContacts();
@@ -54,13 +63,26 @@ class _AppState extends State<App> {
     _loadContacts();
   }
 
+  Future<void> _flushPending(String peerId) async {
+    final msgRepo = MessageRepository(AppDatabase.instance);
+    final pending = await msgRepo.getPendingFor(peerId);
+    for (final msg in pending) {
+      final wire = WireMessage(
+        id: msg.id,
+        chatId: msg.chatId,
+        senderId: IdentityService.instance.ownId,
+        type: msg.contentType.name,
+        content: msg.content,
+        timestamp: msg.timestamp,
+      );
+      _pool.send(peerId, wire.encode());
+      await msgRepo.updateStatus(msg.id, MessageStatus.delivered);
+    }
+  }
+
   Future<void> _loadContacts() async {
     final contacts = await ContactRepository(AppDatabase.instance).getAll();
     _contactsBloc.add(ContactsUpdated(contacts));
-  }
-
-  void _onRawMessage(String raw, dynamic _) {
-    _networkBloc.add(MessageReceived('', raw));
   }
 
   @override
