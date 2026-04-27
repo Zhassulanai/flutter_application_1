@@ -4,10 +4,22 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Используется для сканирования QR-кода контакта</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Используется для отправки фото и видео в чат</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Требуется для записи видео</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>FamilyChat использует локальную сеть для общения с членами семьи без интернета</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_familychat._tcp</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Flutter Application 1</string>
+	<string>FamilyChat</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
