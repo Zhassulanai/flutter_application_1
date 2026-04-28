@@ -4,9 +4,9 @@ import android.graphics.SurfaceTexture
 import android.media.*
 import android.opengl.*
 import android.view.Surface
-import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.atomic.AtomicBoolean
 
 class VideoCompositor(
     private val backPath: String,
@@ -116,6 +116,21 @@ class VideoCompositor(
             drainEncoder()
         }
 
+        // drain any remaining buffered decoder output frames
+        fun drainDecoder(decoder: MediaCodec, awaitFrame: () -> Unit) {
+            var out = decoder.dequeueOutputBuffer(bufInfo, 10_000)
+            while (out >= 0) {
+                decoder.releaseOutputBuffer(out, true)
+                awaitFrame()
+                eglSetup.drawFrame(presentationUs)
+                presentationUs += 1_000_000L / 30
+                drainEncoder()
+                out = decoder.dequeueOutputBuffer(bufInfo, 0)
+            }
+        }
+        drainDecoder(backDecoder) { eglSetup.awaitBackFrame() }
+        drainDecoder(frontDecoder) { eglSetup.awaitFrontFrame() }
+
         encoder.signalEndOfInputStream()
         drainEncoder()
 
@@ -158,8 +173,8 @@ private class EglSetup(val width: Int, val height: Int, encoderSurface: Surface)
     private val backST: SurfaceTexture
     private val frontST: SurfaceTexture
     private val program: Int
-    private var backFrameAvailable = false
-    private var frontFrameAvailable = false
+    private val backFrameAvailable = AtomicBoolean(false)
+    private val frontFrameAvailable = AtomicBoolean(false)
 
     private val VERTEX_SHADER = """
         attribute vec4 aPosition;
@@ -216,10 +231,10 @@ private class EglSetup(val width: Int, val height: Int, encoderSurface: Surface)
         frontTexId = texIds[1]
 
         backST = SurfaceTexture(backTexId).also { st ->
-            st.setOnFrameAvailableListener { backFrameAvailable = true }
+            st.setOnFrameAvailableListener { backFrameAvailable.set(true) }
         }
         frontST = SurfaceTexture(frontTexId).also { st ->
-            st.setOnFrameAvailableListener { frontFrameAvailable = true }
+            st.setOnFrameAvailableListener { frontFrameAvailable.set(true) }
         }
         backSurface = Surface(backST)
         frontSurface = Surface(frontST)
@@ -229,16 +244,16 @@ private class EglSetup(val width: Int, val height: Int, encoderSurface: Surface)
 
     fun awaitBackFrame() {
         val deadline = System.currentTimeMillis() + 100
-        while (!backFrameAvailable && System.currentTimeMillis() < deadline) Thread.sleep(1)
+        while (!backFrameAvailable.get() && System.currentTimeMillis() < deadline) Thread.sleep(1)
         backST.updateTexImage()
-        backFrameAvailable = false
+        backFrameAvailable.set(false)
     }
 
     fun awaitFrontFrame() {
         val deadline = System.currentTimeMillis() + 100
-        while (!frontFrameAvailable && System.currentTimeMillis() < deadline) Thread.sleep(1)
+        while (!frontFrameAvailable.get() && System.currentTimeMillis() < deadline) Thread.sleep(1)
         frontST.updateTexImage()
-        frontFrameAvailable = false
+        frontFrameAvailable.set(false)
     }
 
     fun drawFrame(presentationUs: Long) {
