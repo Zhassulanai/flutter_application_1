@@ -3,7 +3,7 @@ import 'package:path/path.dart';
 
 class AppDatabase {
   static const _name = 'familychat.db';
-  static const _version = 1;
+  static const _version = 2;
 
   Database? _db;
   final bool _inMemory;
@@ -25,6 +25,7 @@ class AppDatabase {
       path,
       version: _version,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -70,5 +71,24 @@ class AppDatabase {
     ''');
     await db.execute('CREATE INDEX idx_messages_chat ON messages(chat_id, timestamp)');
     await db.execute('CREATE INDEX idx_messages_status ON messages(status, is_outgoing)');
+    await _createRecordingsTable(db);
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await _createRecordingsTable(db);
+    }
+  }
+
+  Future<void> _createRecordingsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE recordings (
+        id TEXT PRIMARY KEY,
+        file_path TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        size_bytes INTEGER NOT NULL
+      )
+    ''');
   }
 }
