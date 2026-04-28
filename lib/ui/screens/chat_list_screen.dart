@@ -8,6 +8,7 @@ import '../widgets/avatar_widget.dart';
 import '../widgets/online_indicator.dart';
 import 'chat_screen.dart';
 import 'profile_screen.dart';
+import 'video_recorder_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -52,6 +53,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
           appBar: AppBar(
             title: const Text('FamilyChat'),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.videocam),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const VideoRecorderScreen()),
+                ),
+              ),
               IconButton(
                 icon: const Icon(Icons.person),
                 onPressed: () => Navigator.push(

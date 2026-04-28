@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'blocs/contacts/contacts_bloc.dart';
 import 'blocs/network/network_bloc.dart';
+import 'blocs/video_recorder/video_recorder_bloc.dart';
 import 'data/database.dart';
 import 'data/models/message.dart';
 import 'data/models/wire_message.dart';
 import 'data/repositories/contact_repository.dart';
 import 'data/repositories/message_repository.dart';
+import 'data/repositories/recording_repository.dart';
 import 'network/connection_pool.dart';
 import 'network/mdns_service.dart';
 import 'network/message_handler.dart';
@@ -101,6 +103,11 @@ class _AppState extends State<App> {
       providers: [
         BlocProvider.value(value: _networkBloc),
         BlocProvider.value(value: _contactsBloc),
+        BlocProvider<VideoRecorderBloc>(
+          create: (_) => VideoRecorderBloc(
+            RecordingRepository(AppDatabase.instance),
+          ),
+        ),
       ],
       child: MaterialApp(
         title: 'FamilyChat',

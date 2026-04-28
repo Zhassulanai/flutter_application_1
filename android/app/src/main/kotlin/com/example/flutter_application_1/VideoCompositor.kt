@@ -3,6 +3,7 @@ package com.example.flutter_application_1
 import android.graphics.SurfaceTexture
 import android.media.*
 import android.opengl.*
+import android.opengl.EGLExt
 import android.view.Surface
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -281,7 +282,7 @@ private class EglSetup(val width: Int, val height: Int, encoderSurface: Surface)
         GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "uFrontTex"), 1)
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-        EGL14.eglPresentationTimeANDROID(display, eglSurface, presentationUs * 1000)
+        EGLExt.eglPresentationTimeANDROID(display, eglSurface, presentationUs * 1000)
         EGL14.eglSwapBuffers(display, eglSurface)
     }
 

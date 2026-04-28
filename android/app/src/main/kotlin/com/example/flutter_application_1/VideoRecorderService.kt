@@ -85,19 +85,23 @@ class VideoRecorderService : Service() {
     }
 
     private fun buildRecorder(path: String, width: Int, height: Int): MediaRecorder {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this)
-        else @Suppress("DEPRECATION") MediaRecorder()
-    }.apply {
-        setVideoSource(MediaRecorder.VideoSource.SURFACE)
-        setAudioSource(MediaRecorder.AudioSource.MIC)
-        setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-        setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-        setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-        setVideoSize(width, height)
-        setVideoFrameRate(30)
-        setVideoEncodingBitRate(5_000_000)
-        setOutputFile(path)
-        prepare()
+        val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MediaRecorder(this)
+        } else {
+            @Suppress("DEPRECATION")
+            MediaRecorder()
+        }
+        recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE)
+        recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+        recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+        recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+        recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+        recorder.setVideoSize(width, height)
+        recorder.setVideoFrameRate(30)
+        recorder.setVideoEncodingBitRate(5_000_000)
+        recorder.setOutputFile(path)
+        recorder.prepare()
+        return recorder
     }
 
     private fun openCamera(
