@@ -1,10 +1,13 @@
 package com.example.flutter_application_1
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.hardware.camera2.CameraManager
 import android.media.MediaMetadataRetriever
 import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
@@ -98,6 +101,7 @@ class VideoRecorderPlugin(private val context: Context) {
                 File(backPath).copyTo(File(outputPath), overwrite = true)
                 File(backPath).delete()
                 File(backPath).parentFile?.delete()
+                saveToGallery(outputPath)
                 pendingResult?.success(outputPath)
                 pendingResult = null
             } else {
@@ -106,8 +110,10 @@ class VideoRecorderPlugin(private val context: Context) {
                     File(backPath).delete()
                     File(frontPath).delete()
                     File(backPath).parentFile?.delete()
-                    if (success) pendingResult?.success(outputPath)
-                    else pendingResult?.error("COMPOSE_ERROR", "Composition failed", null)
+                    if (success) {
+                        saveToGallery(outputPath)
+                        pendingResult?.success(outputPath)
+                    } else pendingResult?.error("COMPOSE_ERROR", "Composition failed", null)
                     pendingResult = null
                 }
             }
@@ -115,6 +121,38 @@ class VideoRecorderPlugin(private val context: Context) {
         context.startService(Intent(context, VideoRecorderService::class.java).apply {
             action = VideoRecorderService.ACTION_STOP
         })
+    }
+
+    private fun saveToGallery(sourcePath: String) {
+        try {
+            val name = "VID_${System.currentTimeMillis()}.mp4"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val resolver = context.contentResolver
+                val values = ContentValues().apply {
+                    put(MediaStore.Video.Media.DISPLAY_NAME, name)
+                    put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                    put(MediaStore.Video.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/FlutterApp")
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                }
+                val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: return
+                resolver.openOutputStream(uri)?.use { out ->
+                    File(sourcePath).inputStream().use { it.copyTo(out) }
+                }
+                values.clear()
+                values.put(MediaStore.Video.Media.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            } else {
+                val moviesDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "FlutterApp").also { it.mkdirs() }
+                val target = File(moviesDir, name)
+                File(sourcePath).copyTo(target, overwrite = true)
+                val scanIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).apply {
+                    data = android.net.Uri.fromFile(target)
+                }
+                context.sendBroadcast(scanIntent)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun getVideos(): List<Map<String, Any>> {

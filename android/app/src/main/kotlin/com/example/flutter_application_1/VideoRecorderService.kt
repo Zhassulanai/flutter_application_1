@@ -10,6 +10,7 @@ import android.hardware.camera2.*
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.view.Surface
 import androidx.core.app.NotificationCompat
 import java.io.File
@@ -41,6 +42,7 @@ class VideoRecorderService : Service() {
     private var backPath: String = ""
     private var frontPath: String = ""
     private var singleCamera: Boolean = false
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -58,6 +60,7 @@ class VideoRecorderService : Service() {
                 val backTextureId = intent.getIntExtra(EXTRA_BACK_TEXTURE, -1)
                 val frontTextureId = intent.getIntExtra(EXTRA_FRONT_TEXTURE, -1)
                 startForeground(NOTIFICATION_ID, buildNotification())
+                acquireWakeLock()
                 startRecording(backTextureId, frontTextureId)
             }
             ACTION_STOP -> stopRecording()
@@ -154,6 +157,7 @@ class VideoRecorderService : Service() {
         frontCamera?.close()
         backRecorder?.release()
         frontRecorder?.release()
+        releaseWakeLock()
         onStopped?.invoke(backPath, frontPath)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -175,6 +179,25 @@ class VideoRecorderService : Service() {
             cameraManager.getCameraCharacteristics(it)
                 .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         }
+
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "VideoRecorder::RecordingLock"
+        ).apply {
+            setReferenceCounted(false)
+            acquire(60 * 60 * 1000L)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (_: Exception) {}
+        wakeLock = null
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
