@@ -19,7 +19,7 @@ class VideoRecorderPlugin(private val context: Context) {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "checkConcurrentSupport" -> result.success(checkConcurrentSupport())
-                "startRecording" -> startRecording(result)
+                "startRecording" -> startRecording(call, result)
                 "stopRecording" -> stopRecording(result)
                 "getVideos" -> result.success(getVideos())
                 "deleteVideo" -> {
@@ -52,21 +52,26 @@ class VideoRecorderPlugin(private val context: Context) {
 
     private var currentBackPath: String = ""
     private var currentFrontPath: String = ""
+    private var singleCameraMode: Boolean = false
+    private var lastError: String? = null
     private var pendingResult: MethodChannel.Result? = null
 
-    private fun startRecording(result: MethodChannel.Result) {
+    private fun startRecording(call: io.flutter.plugin.common.MethodCall, result: MethodChannel.Result) {
+        val singleCamera = call.argument<Boolean>("singleCamera") ?: !checkConcurrentSupport()
+        singleCameraMode = singleCamera
+        lastError = null
+
         val dir = File(context.filesDir, "videos/tmp_${System.currentTimeMillis()}").also { it.mkdirs() }
         currentBackPath = File(dir, "back.mp4").absolutePath
-        currentFrontPath = File(dir, "front.mp4").absolutePath
+        currentFrontPath = if (singleCamera) "" else File(dir, "front.mp4").absolutePath
 
-        VideoRecorderService.onError = { msg ->
-            result.error("RECORD_ERROR", msg, null)
-        }
+        VideoRecorderService.onError = { msg -> lastError = msg }
 
         val intent = Intent(context, VideoRecorderService::class.java).apply {
             action = VideoRecorderService.ACTION_START
             putExtra(VideoRecorderService.EXTRA_BACK_PATH, currentBackPath)
             putExtra(VideoRecorderService.EXTRA_FRONT_PATH, currentFrontPath)
+            putExtra(VideoRecorderService.EXTRA_SINGLE_CAMERA, singleCamera)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)
@@ -80,14 +85,31 @@ class VideoRecorderPlugin(private val context: Context) {
         pendingResult = result
         VideoRecorderService.onStopped = { backPath, frontPath ->
             val outputDir = File(context.filesDir, "videos").also { it.mkdirs() }
-            val outputPath = File(outputDir, "output_${System.currentTimeMillis()}.mp4").absolutePath
-            VideoCompositor(backPath, frontPath, outputPath).compose { success ->
+
+            val err = lastError
+            if (err != null) {
                 File(backPath).delete()
-                File(frontPath).delete()
+                if (frontPath.isNotEmpty()) File(frontPath).delete()
                 File(backPath).parentFile?.delete()
-                if (success) pendingResult?.success(outputPath)
-                else pendingResult?.error("COMPOSE_ERROR", "Composition failed", null)
+                pendingResult?.error("RECORD_ERROR", err, null)
                 pendingResult = null
+            } else if (singleCameraMode || frontPath.isEmpty()) {
+                val outputPath = File(outputDir, "output_${System.currentTimeMillis()}.mp4").absolutePath
+                File(backPath).copyTo(File(outputPath), overwrite = true)
+                File(backPath).delete()
+                File(backPath).parentFile?.delete()
+                pendingResult?.success(outputPath)
+                pendingResult = null
+            } else {
+                val outputPath = File(outputDir, "output_${System.currentTimeMillis()}.mp4").absolutePath
+                VideoCompositor(backPath, frontPath, outputPath).compose { success ->
+                    File(backPath).delete()
+                    File(frontPath).delete()
+                    File(backPath).parentFile?.delete()
+                    if (success) pendingResult?.success(outputPath)
+                    else pendingResult?.error("COMPOSE_ERROR", "Composition failed", null)
+                    pendingResult = null
+                }
             }
         }
         context.startService(Intent(context, VideoRecorderService::class.java).apply {

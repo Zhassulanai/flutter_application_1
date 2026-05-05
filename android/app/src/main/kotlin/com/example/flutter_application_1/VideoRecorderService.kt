@@ -25,6 +25,7 @@ class VideoRecorderService : Service() {
         const val EXTRA_FRONT_PATH = "front_path"
         const val EXTRA_BACK_TEXTURE = "back_texture"
         const val EXTRA_FRONT_TEXTURE = "front_texture"
+        const val EXTRA_SINGLE_CAMERA = "single_camera"
 
         var onStopped: ((backPath: String, frontPath: String) -> Unit)? = null
         var onError: ((message: String) -> Unit)? = null
@@ -39,6 +40,7 @@ class VideoRecorderService : Service() {
     private var frontSession: CameraCaptureSession? = null
     private var backPath: String = ""
     private var frontPath: String = ""
+    private var singleCamera: Boolean = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -52,6 +54,7 @@ class VideoRecorderService : Service() {
             ACTION_START -> {
                 backPath = intent.getStringExtra(EXTRA_BACK_PATH) ?: ""
                 frontPath = intent.getStringExtra(EXTRA_FRONT_PATH) ?: ""
+                singleCamera = intent.getBooleanExtra(EXTRA_SINGLE_CAMERA, false)
                 val backTextureId = intent.getIntExtra(EXTRA_BACK_TEXTURE, -1)
                 val frontTextureId = intent.getIntExtra(EXTRA_FRONT_TEXTURE, -1)
                 startForeground(NOTIFICATION_ID, buildNotification())
@@ -65,18 +68,20 @@ class VideoRecorderService : Service() {
     private fun startRecording(backTextureId: Int, frontTextureId: Int) {
         try {
             val backId = getBackCameraId() ?: throw IllegalStateException("No back camera")
-            val frontId = getFrontCameraId() ?: throw IllegalStateException("No front camera")
 
             backRecorder = buildRecorder(backPath, 1920, 1080)
-            frontRecorder = buildRecorder(frontPath, 1280, 720)
-
             openCamera(backId, backRecorder!!) { device, session ->
                 backCamera = device
                 backSession = session
             }
-            openCamera(frontId, frontRecorder!!) { device, session ->
-                frontCamera = device
-                frontSession = session
+
+            if (!singleCamera) {
+                val frontId = getFrontCameraId() ?: throw IllegalStateException("No front camera")
+                frontRecorder = buildRecorder(frontPath, 1280, 720)
+                openCamera(frontId, frontRecorder!!) { device, session ->
+                    frontCamera = device
+                    frontSession = session
+                }
             }
         } catch (e: Exception) {
             onError?.invoke(e.message ?: "Failed to start recording")

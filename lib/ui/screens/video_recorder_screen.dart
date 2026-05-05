@@ -20,6 +20,7 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
   static const _channel = MethodChannel('video_recorder');
   Timer? _timer;
   Duration _elapsed = Duration.zero;
+  bool _singleCameraMode = false;
 
   @override
   void initState() {
@@ -29,6 +30,7 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
 
   Future<void> _checkSupport() async {
     final supported = await _channel.invokeMethod<bool>('checkConcurrentSupport') ?? false;
+    _singleCameraMode = !supported;
     if (!supported && mounted) {
       showDialog(
         context: context,
@@ -61,7 +63,7 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
       return;
     }
     try {
-      await _channel.invokeMethod('startRecording');
+      await _channel.invokeMethod('startRecording', {'singleCamera': _singleCameraMode});
       bloc.add(StartRecording());
       _elapsed = Duration.zero;
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
