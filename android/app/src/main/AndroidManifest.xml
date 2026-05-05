@@ -14,7 +14,7 @@
     <uses-feature android:name="android.hardware.camera.front" android:required="true" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <application
-        android:label="flutter_application_1"
+        android:label="Family chat"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
