@@ -104,6 +104,7 @@ class VideoRecorderService : Service() {
         recorder.setVideoSize(width, height)
         recorder.setVideoFrameRate(30)
         recorder.setVideoEncodingBitRate(5_000_000)
+        recorder.setOrientationHint(90)
         recorder.setOutputFile(path)
         recorder.prepare()
         return recorder

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -21,11 +22,50 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
   Timer? _timer;
   Duration _elapsed = Duration.zero;
   bool _singleCameraMode = false;
+  CameraController? _previewController;
+  bool _previewReady = false;
 
   @override
   void initState() {
     super.initState();
     _checkSupport();
+    _initPreview();
+  }
+
+  Future<void> _initPreview() async {
+    final granted = await PermissionService.requestCameraAndMic();
+    if (!granted) return;
+    try {
+      final cameras = await availableCameras();
+      final back = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+      final controller = CameraController(
+        back,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() {
+        _previewController = controller;
+        _previewReady = true;
+      });
+    } catch (_) {
+      // Превью недоступно — фон останется чёрным, запись будет работать.
+    }
+  }
+
+  Future<void> _disposePreview() async {
+    final c = _previewController;
+    _previewController = null;
+    _previewReady = false;
+    if (mounted) setState(() {});
+    await c?.dispose();
   }
 
   Future<void> _checkSupport() async {
@@ -62,6 +102,7 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
       );
       return;
     }
+    await _disposePreview();
     try {
       await _channel.invokeMethod('startRecording', {'singleCamera': _singleCameraMode});
       bloc.add(StartRecording());
@@ -89,6 +130,7 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
         bloc.add(RecordingFailed(e.message ?? 'Ошибка обработки'));
       }
     }
+    if (mounted) await _initPreview();
   }
 
   Recording _buildRecording(String path) {
@@ -112,6 +154,7 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _previewController?.dispose();
     super.dispose();
   }
 
@@ -126,7 +169,19 @@ class _VideoRecorderScreenState extends State<VideoRecorderScreen> {
           backgroundColor: Colors.black,
           body: Stack(
             children: [
-              Container(color: Colors.black87),
+              if (_previewReady && _previewController != null && !isRecording)
+                Positioned.fill(
+                  child: FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: _previewController!.value.previewSize?.height ?? 1,
+                      height: _previewController!.value.previewSize?.width ?? 1,
+                      child: CameraPreview(_previewController!),
+                    ),
+                  ),
+                )
+              else
+                Container(color: Colors.black87),
 
               Positioned(
                 top: 48,
