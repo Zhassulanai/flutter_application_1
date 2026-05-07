@@ -27,6 +27,8 @@ const state = {
   bonuses: [],
   bonusSpawnTimer: 3,
   ctx: null,
+  bonusesCtx: null,
+  headsCtx: null,
   lastFrameTime: 0,
   running: false,
   round: 0,
@@ -143,9 +145,22 @@ function gameLoop(now) {
   state.lastFrameTime = now;
   updatePlayers(dt);
   updateBonuses(dt);
+  drawHeads();
   updateSidebar();
   updateRoundState();
   if (state.running) requestAnimationFrame(gameLoop);
+}
+
+function drawHeads() {
+  const ctx = state.headsCtx;
+  ctx.clearRect(0, 0, FIELD_SIZE, FIELD_SIZE);
+  for (const p of state.players) {
+    if (!p.alive) continue;
+    ctx.fillStyle = '#ff0';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.thickness / 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function updateRoundState() {
@@ -289,32 +304,31 @@ function updatePlayers(dt) {
       continue;
     }
 
-    // Trail collision
+    // Pickup bonuses BEFORE trail collision check (иначе цветной круг бонуса
+    // считается следом и убивает подбирающего)
+    pickupBonusesAt(p);
+
+    // Trail collision: проверяем точку впереди головы, а не вокруг неё —
+    // иначе свой собственный свежеотрисованный след сразу убивает.
     if (p.spawnImmunity > 0) {
       p.spawnImmunity -= dt;
     } else {
-      const checkRadius = Math.max(1, Math.floor(p.thickness / 2));
-      const px = Math.floor(p.x);
-      const py = Math.floor(p.y);
-      const x0 = Math.max(0, px - checkRadius);
-      const y0 = Math.max(0, py - checkRadius);
-      const w = Math.min(FIELD_SIZE - x0, checkRadius * 2 + 1);
-      const h = Math.min(FIELD_SIZE - y0, checkRadius * 2 + 1);
-      const data = ctx.getImageData(x0, y0, w, h).data;
-      let hit = false;
-      for (let i = 0; i < data.length; i += 4) {
-        if (data[i+3] > 0 && (data[i] > 10 || data[i+1] > 10 || data[i+2] > 10)) {
-          hit = true;
-          break;
+      const lookAhead = p.thickness / 2 + 1;
+      const cx = Math.floor(p.x + Math.cos(p.angle) * lookAhead);
+      const cy = Math.floor(p.y + Math.sin(p.angle) * lookAhead);
+      // Стена впереди — как столкновение
+      if (cx < 0 || cx >= FIELD_SIZE || cy < 0 || cy >= FIELD_SIZE) {
+        // Положение головы ещё в поле, но движемся в стену — пусть едет до Wall collision на следующем кадре
+      } else {
+        const data = ctx.getImageData(cx, cy, 1, 1).data;
+        if (data[3] > 0 && (data[0] > 10 || data[1] > 10 || data[2] > 10)) {
+          p.alive = false;
+          for (const other of state.players) {
+            if (other !== p && other.alive) other.score += 1;
+          }
+          console.log(`${p.name} hit a trail`);
+          continue;
         }
-      }
-      if (hit) {
-        p.alive = false;
-        for (const other of state.players) {
-          if (other !== p && other.alive) other.score += 1;
-        }
-        console.log(`${p.name} hit a trail`);
-        continue;
       }
     }
 
@@ -351,7 +365,6 @@ function updateBonuses(dt) {
     state.bonusSpawnTimer = 3 + Math.random() * 4;
   }
   drawBonuses();
-  checkBonusPickup();
 }
 
 function trySpawnBonus() {
@@ -380,7 +393,8 @@ function isAreaClear(x, y, r) {
 }
 
 function drawBonuses() {
-  const ctx = state.ctx;
+  const ctx = state.bonusesCtx;
+  ctx.clearRect(0, 0, FIELD_SIZE, FIELD_SIZE);
   for (const b of state.bonuses) {
     ctx.fillStyle = b.color;
     ctx.beginPath();
@@ -394,26 +408,20 @@ function drawBonuses() {
   }
 }
 
-function checkBonusPickup() {
+function pickupBonusesAt(p) {
+  if (!p.alive) return;
+  // Подбор: проверяем и центр головы, и точку чуть впереди (там же, где детектор столкновений смотрит)
+  const lookAhead = p.thickness / 2 + 1;
+  const ax = p.x + Math.cos(p.angle) * lookAhead;
+  const ay = p.y + Math.sin(p.angle) * lookAhead;
+  const r2 = (BONUS_RADIUS + p.thickness / 2) * (BONUS_RADIUS + p.thickness / 2);
   for (let i = state.bonuses.length - 1; i >= 0; i--) {
     const b = state.bonuses[i];
-    for (const p of state.players) {
-      if (!p.alive) continue;
-      const dx = p.x - b.x;
-      const dy = p.y - b.y;
-      if (dx*dx + dy*dy <= BONUS_RADIUS * BONUS_RADIUS) {
-        applyBonus(p, b);
-        const ctx = state.ctx;
-        ctx.fillStyle = '#000';
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, BONUS_RADIUS + 1, 0, Math.PI * 2);
-        ctx.fill();
-        // Дать подобравшему мини-иммунитет, чтобы не самоубиться о только что
-        // существовавший круг бонуса (с краями, перекрытыми чёрным).
-        p.spawnImmunity = Math.max(p.spawnImmunity, 0.1);
-        state.bonuses.splice(i, 1);
-        break;
-      }
+    const d1 = (p.x - b.x) ** 2 + (p.y - b.y) ** 2;
+    const d2 = (ax - b.x) ** 2 + (ay - b.y) ** 2;
+    if (d1 <= r2 || d2 <= r2) {
+      applyBonus(p, b);
+      state.bonuses.splice(i, 1);
     }
   }
 }
@@ -459,7 +467,6 @@ function clearAllTrails() {
   for (const p of state.players) {
     if (p.alive) p.spawnImmunity = 0.3;
   }
-  drawBonuses();
 }
 
 // === SIDEBAR ================================================
@@ -500,6 +507,8 @@ function updateSidebar() {
 function startGame() {
   showScreen('game');
   state.ctx = document.getElementById('field').getContext('2d');
+  state.bonusesCtx = document.getElementById('bonuses').getContext('2d');
+  state.headsCtx = document.getElementById('heads').getContext('2d');
   state.targetScore = (menu.players.length - 1) * 10;
   state.round = 0;
   state.players = menu.players.map(createPlayer);
@@ -511,6 +520,8 @@ function startRound() {
   state.round++;
   state.ctx.fillStyle = '#000';
   state.ctx.fillRect(0, 0, FIELD_SIZE, FIELD_SIZE);
+  if (state.headsCtx) state.headsCtx.clearRect(0, 0, FIELD_SIZE, FIELD_SIZE);
+  if (state.bonusesCtx) state.bonusesCtx.clearRect(0, 0, FIELD_SIZE, FIELD_SIZE);
   for (const p of state.players) {
     p.x = Math.random() * (FIELD_SIZE - 200) + 100;
     p.y = Math.random() * (FIELD_SIZE - 200) + 100;

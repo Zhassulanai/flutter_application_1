@@ -22,10 +22,21 @@ body {
 }
 #screen-game.active { display: flex; }
 
+#field-wrap {
+  position: relative;
+  width: 704px;
+  height: 704px;
+}
 #field {
   background: #000;
   border: 2px solid #444;
   display: block;
+}
+#bonuses, #heads {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  pointer-events: none;
 }
 
 #sidebar {
@@ -81,6 +92,8 @@ kbd {
 
 #round-overlay {
   position: absolute;
+  top: 2px;
+  left: 2px;
   width: 700px;
   height: 700px;
   background: rgba(0, 0, 0, 0.7);
@@ -92,6 +105,7 @@ kbd {
   gap: 20px;
   font-size: 32px;
   pointer-events: none;
+  z-index: 10;
 }
 #round-overlay.hidden { display: none; }
 #round-hint { font-size: 18px; opacity: 0.7; }
