@@ -24,8 +24,8 @@ body {
 
 #field-wrap {
   position: relative;
-  width: 704px;
-  height: 704px;
+  width: 844px;
+  height: 844px;
 }
 #field {
   background: #000;
@@ -41,7 +41,7 @@ body {
 
 #sidebar {
   width: 250px;
-  min-height: 700px;
+  min-height: 840px;
   background: #1a1a1a;
   padding: 16px;
   border: 2px solid #444;
@@ -94,8 +94,8 @@ kbd {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 700px;
-  height: 700px;
+  width: 840px;
+  height: 840px;
   background: rgba(0, 0, 0, 0.7);
   color: #fff;
   display: flex;

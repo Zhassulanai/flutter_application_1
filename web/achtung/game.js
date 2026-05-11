@@ -3,7 +3,7 @@
 // ============================================================
 
 // === STATE ==================================================
-const FIELD_SIZE = 700;
+const FIELD_SIZE = 840;
 const BASE_SPEED = 90;
 const BASE_THICKNESS = 4;
 const TURN_RATE = 3.0;
@@ -12,12 +12,12 @@ const BONUS_RADIUS = 14;
 const MAX_BONUSES = 3;
 
 const BONUS_TYPES = [
-  { type: 'speedUp',   color: '#4f4', letter: 'A' },
-  { type: 'slowDown',  color: '#fa4', letter: 'B' },
-  { type: 'thinLine',  color: '#4cf', letter: 'C' },
-  { type: 'thickLine', color: '#a4f', letter: 'D' },
-  { type: 'clearAll',  color: '#fff', letter: 'E' },
-  { type: 'reverse',   color: '#f44', letter: 'F' },
+  { type: 'speedUp',   color: '#4f4', icon: '⚡' },
+  { type: 'slowDown',  color: '#fa4', icon: '🐢' },
+  { type: 'thinLine',  color: '#4cf', icon: '➖' },
+  { type: 'thickLine', color: '#a4f', icon: '⬛' },
+  { type: 'clearAll',  color: '#fff', icon: '🧹' },
+  { type: 'reverse',   color: '#f44', icon: '🔄' },
 ];
 
 const state = {
@@ -158,7 +158,7 @@ function drawHeads() {
     if (!p.alive) continue;
     ctx.fillStyle = '#ff0';
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.thickness / 2, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, p.thickness / 2 - 0.5, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -225,10 +225,23 @@ function runCountdown() {
 }
 
 // === PLAYERS ================================================
+function hexToRgb(hex) {
+  // Поддерживает #rgb и #rrggbb
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
+
 function createPlayer(config) {
+  const rgb = hexToRgb(config.color);
   return {
     name: config.name,
     color: config.color,
+    rgb,
     keyLeft: config.left,
     keyRight: config.right,
     x: Math.random() * (FIELD_SIZE - 200) + 100,
@@ -245,6 +258,7 @@ function createPlayer(config) {
     gapTimer: 1 + Math.random() * 2,
     pressed: { left: false, right: false },
     spawnImmunity: 0.5,
+    recentTrail: [], // последние позиции для иммунитета только к свежему своему следу
   };
 }
 
@@ -294,6 +308,11 @@ function updatePlayers(dt) {
     p.x += Math.cos(p.angle) * p.speed * dt;
     p.y += Math.sin(p.angle) * p.speed * dt;
 
+    // Запоминаем свежую позицию (для иммунитета только к своему свежему следу).
+    // ~30 точек ≈ полсекунды пути.
+    p.recentTrail.push({ x: p.x, y: p.y });
+    if (p.recentTrail.length > 30) p.recentTrail.shift();
+
     // Wall collision
     if (p.x < 0 || p.x >= FIELD_SIZE || p.y < 0 || p.y >= FIELD_SIZE) {
       p.alive = false;
@@ -308,18 +327,17 @@ function updatePlayers(dt) {
     // считается следом и убивает подбирающего)
     pickupBonusesAt(p);
 
-    // Trail collision: проверяем точку впереди головы, а не вокруг неё —
-    // иначе свой собственный свежеотрисованный след сразу убивает.
+    // Trail collision: проверяем точку впереди головы на расстоянии thickness/2 + 1.
+    // Это гарантирует, что свой собственный свежеотрисованный бок (он рисуется
+    // ПОЗАДИ точки проверки) не убивает. Чужие следы и свой собственный старый
+    // хвост — убивают.
     if (p.spawnImmunity > 0) {
       p.spawnImmunity -= dt;
     } else {
       const lookAhead = p.thickness / 2 + 1;
       const cx = Math.floor(p.x + Math.cos(p.angle) * lookAhead);
       const cy = Math.floor(p.y + Math.sin(p.angle) * lookAhead);
-      // Стена впереди — как столкновение
-      if (cx < 0 || cx >= FIELD_SIZE || cy < 0 || cy >= FIELD_SIZE) {
-        // Положение головы ещё в поле, но движемся в стену — пусть едет до Wall collision на следующем кадре
-      } else {
+      if (cx >= 0 && cx < FIELD_SIZE && cy >= 0 && cy < FIELD_SIZE) {
         const data = ctx.getImageData(cx, cy, 1, 1).data;
         if (data[3] > 0 && (data[0] > 10 || data[1] > 10 || data[2] > 10)) {
           p.alive = false;
@@ -340,7 +358,9 @@ function updatePlayers(dt) {
         p.gapTimer = 1 + Math.random() * 2;
       } else {
         p.inGap = true;
-        p.gapTimer = 0.15;
+        // Длина щели в пикселях = толщина * 3.6 (с запасом ×2, чтобы толстая
+        // змейка точно прошла через свою щель). Делим на скорость → время.
+        p.gapTimer = (p.thickness * 3.6) / p.speed;
       }
     }
 
@@ -400,18 +420,17 @@ function drawBonuses() {
     ctx.beginPath();
     ctx.arc(b.x, b.y, BONUS_RADIUS, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 16px sans-serif';
+    ctx.font = '18px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(b.letter, b.x, b.y);
+    ctx.fillText(b.icon, b.x, b.y);
   }
 }
 
 function pickupBonusesAt(p) {
   if (!p.alive) return;
-  // Подбор: проверяем и центр головы, и точку чуть впереди (там же, где детектор столкновений смотрит)
-  const lookAhead = p.thickness / 2 + 1;
+  // Подбор: проверяем и центр головы, и точку чуть впереди
+  const lookAhead = p.speed * (1 / 60) + 1;
   const ax = p.x + Math.cos(p.angle) * lookAhead;
   const ay = p.y + Math.sin(p.angle) * lookAhead;
   const r2 = (BONUS_RADIUS + p.thickness / 2) * (BONUS_RADIUS + p.thickness / 2);
@@ -471,11 +490,11 @@ function clearAllTrails() {
 
 // === SIDEBAR ================================================
 const EFFECT_LABELS = {
-  speedUp: 'Скорость+',
-  slowDown: 'Замедление',
-  thinLine: 'Тонкая',
-  thickLine: 'Толстая',
-  reverse: 'Реверс',
+  speedUp: '⚡',
+  slowDown: '🐢',
+  thinLine: '➖',
+  thickLine: '⬛',
+  reverse: '🔄',
 };
 
 function updateSidebar() {
@@ -506,7 +525,7 @@ function updateSidebar() {
 // === GAME FLOW ==============================================
 function startGame() {
   showScreen('game');
-  state.ctx = document.getElementById('field').getContext('2d');
+  state.ctx = document.getElementById('field').getContext('2d', { willReadFrequently: true });
   state.bonusesCtx = document.getElementById('bonuses').getContext('2d');
   state.headsCtx = document.getElementById('heads').getContext('2d');
   state.targetScore = (menu.players.length - 1) * 10;
@@ -522,18 +541,40 @@ function startRound() {
   state.ctx.fillRect(0, 0, FIELD_SIZE, FIELD_SIZE);
   if (state.headsCtx) state.headsCtx.clearRect(0, 0, FIELD_SIZE, FIELD_SIZE);
   if (state.bonusesCtx) state.bonusesCtx.clearRect(0, 0, FIELD_SIZE, FIELD_SIZE);
+  // Спавн с гарантированным минимальным расстоянием между игроками,
+  // и направлением "от центра" чтобы не ехать сразу в соседа.
+  const placed = [];
+  const minDist = 200;
+  const margin = 120;
+  const cx = FIELD_SIZE / 2;
+  const cy = FIELD_SIZE / 2;
   for (const p of state.players) {
-    p.x = Math.random() * (FIELD_SIZE - 200) + 100;
-    p.y = Math.random() * (FIELD_SIZE - 200) + 100;
-    p.angle = Math.random() * Math.PI * 2;
+    let x, y;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      x = margin + Math.random() * (FIELD_SIZE - margin * 2);
+      y = margin + Math.random() * (FIELD_SIZE - margin * 2);
+      let ok = true;
+      for (const q of placed) {
+        const dx = x - q.x, dy = y - q.y;
+        if (dx*dx + dy*dy < minDist * minDist) { ok = false; break; }
+      }
+      if (ok) break;
+    }
+    p.x = x;
+    p.y = y;
+    // Угол смотрит примерно "от центра" (±60°), чтобы не лететь в гущу
+    const awayAngle = Math.atan2(y - cy, x - cx);
+    p.angle = awayAngle + (Math.random() - 0.5) * (Math.PI / 1.5);
     p.alive = true;
     p.effects = {};
     p.inGap = false;
     p.gapTimer = 1 + Math.random() * 2;
-    p.spawnImmunity = 0.5;
+    p.spawnImmunity = 1.0;
     p.speed = p.baseSpeed;
     p.thickness = p.baseThickness;
     p.pressed = { left: false, right: false };
+    p.recentTrail = [];
+    placed.push({ x, y });
   }
   state.bonuses = [];
   state.bonusSpawnTimer = 3;
@@ -578,9 +619,12 @@ window.addEventListener('keydown', (e) => {
     renderPlayerList();
     return;
   }
-  // Enter для перехода между раундами
+  // Enter для запуска игры из меню и перехода между раундами
   if (e.key === 'Enter') {
-    if (state.phase === 'between-rounds') {
+    if (state.phase === 'menu') {
+      const startBtn = document.getElementById('start-btn');
+      if (!startBtn.disabled) startGame();
+    } else if (state.phase === 'between-rounds') {
       startRound();
     } else if (state.phase === 'game-over') {
       hideRoundOverlay();
